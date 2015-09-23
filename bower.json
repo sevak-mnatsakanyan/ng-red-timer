@@ -1,0 +1,35 @@
+{
+  "name": "ng-red-timer",
+  "version": "0.0.1",
+  "authors": [
+    "ShaderZAK <https://github.com/shaderzak>"
+  ],
+  "description": "AngularJS non-singleton flexible timer module",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/shaderzak/ng-red-timer.git"
+  },
+  "main": "./js/timer.factory.js",
+  "dependencies": {
+    "angular": ">= 1.0.7",
+    "momentjs": "~2.9.0",
+    "humanize-duration": "~2.8.0"
+  },
+  "ignore": [
+    "node_modules",
+    "bower_components"
+  ],
+  "moduleType": [
+    "globals"
+  ],
+  "keywords": [
+    "timer",
+    "angular",
+    "angularjs",
+    "non-singleton",
+    "global",
+    "factory"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/shaderzak/ng-red-timer"
+}
