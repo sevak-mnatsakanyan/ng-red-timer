@@ -18,6 +18,13 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         STATUS_STARTED = 1,
         STATUS_PAUSED = 2;
 
+    var EVENT_START = 'timer_start',
+        EVENT_STOP = 'timer_stop',
+        EVENT_RESET = 'timer_reset',
+        EVENT_TICK_SECONDS = 'timer_ontick_seconds',
+        EVENT_TICK_MINUTES = 'timer_ontick_minutes',
+        EVENT_TICK_HOURS = 'timer_ontick_hours';
+
     var intervalValue = 0,
         intervalLastMinute = 0, // we save last broadcasted minutes value
         intervalLastHour = 0, // we save last broadcasted hours value
@@ -25,39 +32,32 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         intervalStart = null,
         intervalPreviousTime = null,
         statusCode = STATUS_STOPPED,
-        eventsPrefix = 'timer_', // events for broadcasting
+        eventsPrefix = '', // events for broadcasting
         events = {
-            start: 'start',
-            stop: 'stop',
-            reset: 'reset',
-            tick_seconds: 'ontick_seconds',
-            tick_minutes: 'ontick_minutes',
-            tick_hours: 'ontick_hours',
+            start: EVENT_START,
+            stop: EVENT_STOP,
+            reset: EVENT_RESET,
+            tick_seconds: EVENT_TICK_SECONDS,
+            tick_minutes: EVENT_TICK_MINUTES,
+            tick_hours: EVENT_TICK_HOURS,
         },
         configs = {
-
             // timerId is required during event broadcasting
             // so receiver could know which timer triggered
             timerId: '',
 
             // callbacks to be called on specified events
-            callbacks: {
-                'start': [],
-                'stop': [],
-                'reset': [],
-                'ontick_seconds': [],
-                'ontick_minutes': [],
-                'ontick_hours': [],
-            },
+            // properties: Arrays by eventName
+            callbacks: {},
+
+            // broadcasting options time specific events are 
+            // disabled due to performance issues
+            // properties: Booleans by eventName
+            broadcasts: {},
         };
 
-    var defaultOptions = {
-        timerId: 'timer-global-id',
-        callbacks: {},
-    };
-
-    function runCallbacks(event, data) {
-        var clbks = configs.callbacks[event],
+    function execute(eventName, data) {
+        var clbks = configs.callbacks[eventName],
             clbks_data = angular.copy({
                 timerId: configs.timerId,
                 currentValue: intervalValue
@@ -70,17 +70,23 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         for (var idx = 0; idx < clbks.length; idx++) {
             var clbk = clbks[idx];
             if (clbk && angular.isFunction(clbk)) {
-                clbk(data);
+                clbk(eventName, clbks_data);
             }
         }
     }
 
-    function broadcast(event, data) {
-        runCallbacks(event, data);
-        $rootScope.$broadcast(eventsPrefix + event, angular.copy({
-            timerId: configs.timerId,
-            currentValue: intervalValue,
-        }, data));
+    function broadcast(eventName, data) {
+        if (configs.broadcasts[eventName]) {
+            $rootScope.$broadcast(eventName, angular.copy({
+                timerId: configs.timerId,
+                currentValue: intervalValue,
+            }, data));    
+        }
+    }
+
+    function sendUpdates(eventName, data) {
+        execute(eventName, data);
+        broadcast(eventName, data);
     }
 
     function intervalFunction(count, forced) {
@@ -92,16 +98,17 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         intervalValue += passed;
 
         if (!forced) {
-            broadcast(events.tick_seconds, {});
+            sendUpdates(events.tick_seconds, {});
+
             passedMinutes = (intervalValue - intervalValue % 60) / 60;
             passedHours = (passedMinutes - passedMinutes % 60) / 60;
 
             if (intervalLastMinute != passedMinutes) {
-                broadcast(events.tick_minutes, {});
+                sendUpdates(events.tick_minutes, {});
                 intervalLastMinute = passedMinutes;
             }
             if (intervalLastHour != passedHours) {
-                broadcast(events.tick_hours, {});
+                sendUpdates(events.tick_hours, {});
                 intervalLastHour = passedHours;
             }
         }
@@ -115,14 +122,30 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
      * 
      **/
     this.init = function(options) {
+        
+        // Basic member initialization
+        for (var eventIndex in events) {
+            var eventName = events[eventIndex];
+            configs.callbacks[eventName] = [];
+            configs.broadcasts[eventName] = false;
+        }
+
         if (!options) {
             return;
         }
-        // merging according our copy of progressCallback
+
+        // Merging according our copy of configs
         if (options.callbacks) {
             for (var evnt in configs.callbacks) {
                 if (options.callbacks[evnt]) {
                     this.registerCallback(evnt, options.callbacks[evnt])
+                }
+            }
+        }
+        if (options.broadcasts) {
+            for (var evnt in configs.broadcasts) {
+                if (options.broadcasts[evnt]) {
+                    configs.broadcasts[evnt] = (options.broadcasts[evnt] && options.broadcasts[evnt] != 'false') ? true : false;
                 }
             }
         }
@@ -223,18 +246,21 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
     /**
      * Registers callback for progress updates
      * 
-     * @type: index of callbacks
+     * @eventName: index of callbacks
      * @callback: function to be called
      * @return: callbackId to unregister callback
      * 
      **/
-    this.registerCallback = function(type, callback) {
+    this.registerCallback = function(eventName, callback) {
         if (!callback || !angular.isFunction(callback)) {
-            throw 'TimerService: onyl functions can be registered as callback';
+            throw 'TimerService: only functions can be registered as callback';
         }
-        var index = configs.callbacks[type].length;
-        configs.callbacks[type].push(callback);
-        return type + '_' + index;
+        if (!configs.callbacks[eventName] || !angular.isArray(configs.callbacks[eventName])) {
+            throw 'TimerService: timer first should be initialized correctly, configs.callbacks is not valid array';
+        }
+        var index = configs.callbacks[eventName].length;
+        configs.callbacks[eventName].push(callback);
+        return eventName + '_' + index;
     };
 
     /**
@@ -277,11 +303,7 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
      * 
      **/
     this.getEvents = function() {
-        var r = angular.copy(events);
-        for (var i in r) {
-            r[i] = eventsPrefix + r[i];
-        }
-        return r;
+        return angular.copy(events);
     };
 
     /**
