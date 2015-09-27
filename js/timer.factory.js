@@ -56,6 +56,22 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
             broadcasts: {},
         };
 
+    function debug(txt) {
+        console.log('TimerObject > ' + txt);
+    }
+
+    // this function is used to calculate passed time in intervalFunction,
+    // as $interval fires approximate to 1000, it may occure at 1001, 1002 or 999
+    function convertToSeconds(mls) {
+        var s = (mls - mls % 1000) / 1000,
+            ms = mls % 1000;
+        if (ms == 0)
+            return s;
+        if (ms >= 500)
+            return s + 1;
+        return s;
+    }
+
     function execute(eventName, data) {
         var clbks = configs.callbacks[eventName],
             clbks_data = angular.copy({
@@ -90,12 +106,16 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
     }
 
     function intervalFunction(count, forced) {
-        // console.log('TimerService: interval function called');
+        
+        var now = new Date().getTime(),
+            passed = 0;
 
-        var now = moment(),
-            passed = now.diff(intervalPreviousTime, 'seconds');
+        // moment.diff('seconds') function gives 0 when time is 999ms
+        passed = convertToSeconds(now - intervalPreviousTime);
 
         intervalValue += passed;
+
+        // debug('passed = ' + passed + '; diff = ' + (now - intervalPreviousTime));
 
         if (!forced) {
             sendUpdates(events.tick_seconds, {});
@@ -171,7 +191,7 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         }
 
         statusCode = STATUS_STARTED;
-        intervalStart = moment();
+        intervalStart = new Date().getTime();
         intervalPreviousTime = intervalStart;
 
         if (intervalID)
@@ -206,6 +226,8 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
      **/
     this.reset = function() {
         intervalValue = 0;
+        intervalLastMinute = 0;
+        intervalLastHour = 0;
         this.stop(true);
         broadcast(events.reset, {});
     };
