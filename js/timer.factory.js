@@ -177,12 +177,12 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
     /**
      * Start timer
      * 
-     * @initValue:
-     * @silent: 
+     * @initValue: value to count timer from
+     * @silent: mode not to send any updates
      * 
      **/
     this.start = function(initValue, silent) {
-        if (initValue && initValue > 0) {
+        if (angular.isDefined(initValue) &&  !isNaN(initValue)) {
             intervalValue = initValue;
         }
 
@@ -197,26 +197,30 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         if (intervalID)
             $interval.cancel(intervalID);
         intervalID = $interval(intervalFunction, 1000); // per second
-        if (!silent)
-            broadcast(events.start, {
+
+        if (!silent) {
+            sendUpdates(events.start, {
                 startTime: intervalStart
             });
+        }
     };
 
     /**
      * Stop timer
      * 
-     * @silent: mode not to broadcast events or run callbacks
+     * @silent: mode not to sendUpdates events or run callbacks
      * 
      **/
     this.stop = function(silent) {
         statusCode = STATUS_STOPPED;
         if (intervalID) {
             $interval.cancel(intervalID);
-            if (!silent)
-                broadcast(events.stop, {
-                    stopTime: moment()
-                });
+        }
+
+        if (!silent) {
+            sendUpdates(events.stop, {
+                stopTime: moment()
+            });
         }
     };
 
@@ -229,7 +233,7 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         intervalLastMinute = 0;
         intervalLastHour = 0;
         this.stop(true);
-        broadcast(events.reset, {});
+        sendUpdates(events.reset, {});
     };
 
     /**
@@ -275,10 +279,10 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
      **/
     this.registerCallback = function(eventName, callback) {
         if (!callback || !angular.isFunction(callback)) {
-            throw 'TimerService: only functions can be registered as callback';
+            throw 'TimerFactory: only functions can be registered as callback';
         }
         if (!configs.callbacks[eventName] || !angular.isArray(configs.callbacks[eventName])) {
-            throw 'TimerService: timer first should be initialized correctly, configs.callbacks is not valid array';
+            throw 'TimerFactory: timer first should be initialized correctly, configs.callbacks is not valid array';
         }
         var index = configs.callbacks[eventName].length;
         configs.callbacks[eventName].push(callback);
@@ -296,7 +300,7 @@ window.TimerObject = function TimerObject($injector, $timeout, $interval, $local
         var callbackId_a = callbackId.split('_', 2);
 
         if (callbackId_a.length < 2)
-            throw 'TimerService: failed to unregister callback, invalid callbackId';
+            throw 'TimerFactory: failed to unregister callback, invalid callbackId';
         return configs.callbacks[callbackId_a[0]].splice(callbackId_a[1], 1);
     };
 
